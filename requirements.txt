@@ -1,0 +1,8 @@
+jupyter
+notebook
+seaborn
+matplotlib
+pytorch
+pandas
+numpy
+pyportfolioopt
