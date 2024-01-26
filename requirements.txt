@@ -6,3 +6,6 @@ pytorch
 pandas
 numpy
 pyportfolioopt
+bsedata
+yfinance
+nsepy
