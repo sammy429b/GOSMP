@@ -2,7 +2,7 @@ jupyter
 notebook
 seaborn
 matplotlib
-pytorch
+torch
 pandas
 numpy
 pyportfolioopt
