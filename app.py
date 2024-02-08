@@ -34,7 +34,6 @@ def main():
 
 
 def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amount, start_date, num_days, nifty_csv_file):
-    print(timed_df.columns)
     st.title("Portfolio without Optimization")
     st.write("stocks:")
     st.write(pd.DataFrame(timed_df.columns, columns=["Stocks"]))
@@ -48,7 +47,7 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     st.write(f"Portfolio Annual Return in Percentage: {percent_ret}")
 
     st.title("Portfolio with Optimization")
-    performance, invested, weights, not_invested = withOptimization(
+    performance, invested, weights, not_invested, r = withOptimization(
         timed_df, exp_ret_type, cov_type, weight_type, invest_amount, start_date)
     st.write(f"Expected annual return: {performance[0]}")
     st.write(f"Annual volatility: {performance[1]}")
@@ -67,8 +66,8 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     #     st.write(f"{key}: {value}")
 
     st.write("Backtesting")
-    dats, r, weights_alloc = backtest_with_nifty(
-        nifty_csv_file, invest_amount, start_date, num_days, timed_df, weights, not_invested)
+    dats, weights_alloc = backtest_with_nifty(
+        nifty_csv_file, invest_amount, start_date, num_days, timed_df, weights, not_invested, invested, r)
 
     # show table of units and price for each stock allocation
     st.write("Stock Allocation")
@@ -90,17 +89,17 @@ def open_optimization_page():
 
     # get the user input
     invest_amount = st.number_input(
-        "Enter the amount you want to invest", value=10000)
+        "Enter the amount you want to invest", value=1_00_000)
 
     start_date = st.date_input(
-        "Enter the start date for optimization", datetime.date(2010, 1, 5))
+        "Enter the start date for optimization", datetime.date(2019, 9, 19))
 
     # input for date range
     start_date_df = st.date_input(
-        "Enter the start date for DataFrame", datetime.date(2010, 1, 5))
+        "Enter the start date for DataFrame", datetime.date(2019, 1, 5))
 
     end_date_df = st.date_input(
-        "Enter the end date for DataFrame", datetime.date(2019, 1, 5))
+        "Enter the end date for DataFrame", datetime.date(2024, 2, 8))
 
     # ensure that the start_date is  between start_date_df and end_date_df
     if start_date_df > start_date:
@@ -110,7 +109,7 @@ def open_optimization_page():
     num_columns_to_keep = st.number_input(
         "Enter the number of columns to keep", value=100)
 
-    num_days = st.number_input("Enter the number of days", value=3000)
+    num_days = st.number_input("Enter the number of days", value=600)
 
     exp_ret_type = {
         "type": "ema",
@@ -130,7 +129,7 @@ def open_optimization_page():
 
     # button click to show the optimization
     if st.button("Optimize"):
-        timed_df = load_and_clean("close_dupli.csv")
+        timed_df = load_and_clean("Fetched_nifty500_fm2019_withDATE.csv")
         timed_df = clean(timed_df, start_date=start_date_df,
                          end_date=end_date_df, num_columns_to_keep=num_columns_to_keep)
         showOptimization(timed_df, exp_ret_type, cov_type,

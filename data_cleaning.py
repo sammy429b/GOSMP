@@ -1,3 +1,4 @@
+import numpy as np
 from bsedata.bse import BSE
 from bsedata.exceptions import InvalidStockException  # Import the exception
 import pandas as pd
@@ -24,7 +25,8 @@ def setup():
 
 def load_and_clean(csv_file):
     timed_df = pd.read_csv(csv_file)
-    timed_df.fillna(0, inplace=True)
+    timed_df = timed_df.replace(0, np.nan).fillna(method='ffill')
+    timed_df = timed_df.replace(0, np.nan).fillna(method='bfill')
 
     timed_df['Date'] = pd.to_datetime(timed_df['Date'])
     timed_df.set_index('Date', inplace=True)
