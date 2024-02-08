@@ -66,14 +66,14 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     #     st.write(f"{key}: {value}")
 
     st.write("Backtesting")
-    dats, weights_alloc = backtest_with_nifty(
+    dats = backtest_with_nifty(
         nifty_csv_file, invest_amount, start_date, num_days, timed_df, weights, not_invested, invested, r)
 
     # show table of units and price for each stock allocation
     st.write("Stock Allocation")
-    st.write(pd.DataFrame(weights_alloc).T)
-    st.write(sum([weights_alloc[stock]["allocated"]
-             for stock in weights_alloc]))
+    st.write(pd.DataFrame(invested).T)
+    st.write(sum([invested[stock]["allocated"]
+             for stock in invested]))
 
     dats.index = pd.to_datetime(dats['Date'])
     dats = dats.drop(["Date"], axis=1)

@@ -158,7 +158,7 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
         invested[i] = {
             "price": price,
             "units": units,
-            "allocated": stock_invest
+            "allocated": price*units
         }
 
     sum_investable = sum([invested[i]["allocated"] for i in invested])
@@ -170,7 +170,7 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
             invested[i] = {
                 "price": price,
                 "units": math.floor(remaining / price),
-                "allocated": remaining
+                "allocated": price * math.floor(remaining / price)
             }
             not_invested.remove(i)
             break
@@ -358,4 +358,4 @@ def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int
     # plt.legend(["Portfolio", "Nifty"])
     # plt.tight_layout()
 
-    return dats, weights_alloc
+    return dats
