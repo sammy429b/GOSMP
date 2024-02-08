@@ -48,7 +48,7 @@ def withoutOptimization(timed_df: pd.DataFrame):
     return port_variance, port_volatility, port_annual_return, percent_var, percent_vols, percent_ret
 
 
-def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict, weight_type: dict):
+def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict, weight_type: dict, invest_amount: int, start_date):
     """
     This function calculates the portfolio variance, volatility, and annual return with optimization.
     timed_df: pd.DataFrame: The processed df with the date as the index and the stock prices as the columns.
@@ -83,7 +83,7 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
     dict = {"type": "efficient_return", "target_return": number}
 
     """
-
+    print(timed_df.columns)
     mu = None
     if exp_ret_type["type"] == "mean":
         mu = expected_returns.mean_historical_return(
@@ -143,15 +143,30 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
     total_weight = sum(refined_weights.values())
     refined_weights_percent = {
         key: (value / total_weight) * 100 for key, value in refined_weights.items()}
-    assest = []
-    weight = {}
     print("Count: ", len(refined_weights_percent))
-    for key, value in refined_weights_percent.items():
-        assest.append(key)
-        weight[key] = value
-        print(f"{key}: {value:.2f}%")
 
-    return performance, assest, weight
+    not_invested = []
+    invested = {}
+
+    for i in refined_weights_percent:
+        price = timed_df[i][-1]
+        stock_invest = refined_weights_percent[i] * invest_amount / 100
+        if stock_invest < price or refined_weights_percent[i] < 1:
+            not_invested.append(i)
+            continue
+        invested[i] = stock_invest
+
+    sum_investable = sum(invested.values())
+    remaining = invest_amount - sum_investable
+
+    for i in not_invested:
+        c = timed_df[i][start_date.strftime("%Y-%m-%d")]
+        if c < remaining:
+            invested[i] = c
+            remaining -= c
+            not_invested.remove(i)
+
+    return performance, invested, refined_weights_percent, not_invested
 
 
 # newTimeDf = timed_df[[i for i in weight.keys()]]
@@ -162,9 +177,7 @@ def DiscreteAllocation(timed_df, weight, investAmount, startDate):
     newWeights = {}
     for key, value in weight.items():
         allocatedPrice = value*investAmount*0.01
-        # Use Start date in iloc
         units = math.floor(allocatedPrice / timed_df[key][startDate])
-        print(units)
         rem: pd.Series = allocatedPrice - units * timed_df[key][startDate]
         print(rem)
         newWeights[key] = {"price": timed_df[key][startDate], "units": units, "allocated": (
@@ -253,14 +266,26 @@ def PercentChange(window, totalWindows):
 # portfolio.plot(x="Date", y="PctChange", kind="line", ax=ax, style='b', rot=90)
 
 
-def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int, timed_df: pd.DataFrame, weights: dict):
-
+def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int, timed_df: pd.DataFrame, weights: dict, not_invested: list):
     newTimeDf = timed_df[[i for i in weights.keys()]]
 
-    r, weights = DiscreteAllocation(
+    r, weights_alloc = DiscreteAllocation(
         newTimeDf, weights, invest_amount, start_date.strftime("%Y-%m-%d"))
 
-    window, total_windows = BackTest(newTimeDf, start_date, num_days, weights)
+    for i in not_invested:
+        c = timed_df[i][start_date.strftime("%Y-%m-%d")]
+
+        if c < r:
+            # find how many units of i can be allocated
+            units = math.floor(r / c)
+            rem = r - units * c
+            weights_alloc[i] = {"price": c, "units": units,
+                                "allocated": units * c}
+            r = rem
+            not_invested.remove(i)
+
+    window, total_windows = BackTest(
+        newTimeDf, start_date, num_days, weights_alloc)
 
     portfolioPercentChange, endDates = PercentChange(window, total_windows)
 
@@ -322,5 +347,4 @@ def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int
     # plt.legend(["Portfolio", "Nifty"])
     # plt.tight_layout()
 
-    return dats
-
+    return dats, r, weights_alloc
