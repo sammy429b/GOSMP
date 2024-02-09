@@ -3,7 +3,7 @@ import datetime
 import pandas as pd
 import numpy as np
 from matplotlib import pyplot as plt
-from optimizer import withoutOptimization, withOptimization, backtest_with_nifty
+from optimizer import withoutOptimization, withOptimization, backtest_with_nifty, totalReturn
 from data_cleaning import load_and_clean, clean
 from questions import questions, calculate_risk_score, calculate_risk_category
 
@@ -27,7 +27,8 @@ def main():
 
     st.write(f"Risk Score: {risk_score}")
     st.write(f"Risk Category: {risk_category}")
-
+    # store the risk category in the session state
+    st.session_state.risk_category = risk_category
     # show a button that will redirect to a new page
     if st.button("Portfolio Optimization"):
         st.session_state.page = 1
@@ -39,18 +40,18 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     st.write(pd.DataFrame(timed_df.columns, columns=["Stocks"]))
     port_variance, port_volatility, port_annual_return, percent_var, percent_vols, percent_ret = withoutOptimization(
         timed_df)
-    st.write(f"Portfolio Variance: {port_variance}")
-    st.write(f"Portfolio Volatility: {port_volatility}")
-    st.write(f"Portfolio Annual Return: {port_annual_return}")
+    st.write(f"Portfolio Variance: {port_variance} in ")
     st.write(f"Portfolio Variance in Percentage: {percent_var}")
+    st.write(f"Portfolio Volatility: {port_volatility}")
     st.write(f"Portfolio Volatility in Percentage: {percent_vols}")
+    st.write(f"Portfolio Annual Return: {port_annual_return}")
     st.write(f"Portfolio Annual Return in Percentage: {percent_ret}")
 
     st.title("Portfolio with Optimization")
     performance, invested, weights, not_invested, r = withOptimization(
         timed_df, exp_ret_type, cov_type, weight_type, invest_amount, start_date)
-    st.write(f"Expected annual return: {performance[0]}")
-    st.write(f"Annual volatility: {performance[1]}")
+    st.write(f"Expected annual return: {performance[0] * 100 :.2f}%")
+    st.write(f"Annual volatility: {performance[1] * 100 :.2f}%")
     st.write(f"Sharpe ratio: {performance[2]}")
 
     st.write("Portfolio Allocation")
@@ -72,6 +73,8 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     # show table of units and price for each stock allocation
     st.write("Stock Allocation")
     st.write(pd.DataFrame(invested).T)
+
+    st.write("Total Investment")
     st.write(sum([invested[stock]["allocated"]
              for stock in invested]))
 
@@ -79,8 +82,29 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     dats = dats.drop(["Date"], axis=1)
     st.write("Portfolio vs Nifty")
     dats.columns = ["Nifty percent change", "Portfolio percent change"]
-
+    st.write(dats)
     st.line_chart(data=dats)
+
+    # # calculate the final returns of the portfolio and the nifty starting from start_date and ending after duration days
+    # end_invest = datetime.datetime.strptime(start_date, "%Y-%m-%d") + datetime.timedelta(days=backtest_duration)
+    # end_invest = timed_df.index[timed_df.index.get_indexer([end_invest],method='nearest')]
+    # total_portfolio_return = []
+    # for key, value in invested.items():
+    #     invested_start = timed_df[key][start_date] * invested[key]["units"]
+    #     invested_end = timed_df[key][end_invest] * invested[key]["units"]
+    #     total_portfolio_return.append((invested_end - invested_start) / invested_start * 100)
+
+    # nifty_start = nifty["nifty"][start_date]
+    # nifty_end = nifty["nifty"][end_invest]
+    # nifty_return = (nifty_end - nifty_start) / nifty_start * 100
+
+    total_portfolio_return, nifty_return = totalReturn(
+        nifty_csv_file, start_date, num_days, timed_df, invested)
+
+    st.write("Total Portfolio Return")
+    st.write(total_portfolio_return)
+    st.write("Nifty Return")
+    st.write(nifty_return)
 
 
 def open_optimization_page():
@@ -120,16 +144,40 @@ def open_optimization_page():
         "type": "exp_cov"
     }
 
-    weight_type = {
-        "type": "max_sharpe",
-        "target_volatility": 0.15  # TODO change this value based on user risk score
-    }
+    weight_type = {}
+
+    risk_type = st.session_state.risk_category
+    if risk_type == "Low risk":
+        weight_type = {
+            "type": "efficient_risk",
+            "target_volatility": 0.1
+        }
+    elif risk_type == "Moderate risk":
+        weight_type = {
+            "type": "efficient_risk",
+            "target_volatility": 0.2
+        }
+    elif risk_type == "High risk":
+        weight_type = {
+            "type": "efficient_risk",
+            "target_volatility": 0.3
+        }
+    elif risk_type == "Very high risk":
+        weight_type = {
+            "type": "efficient_risk",
+            "target_volatility": 0.4
+        }
+    else:
+        weight_type = {
+            "type": "efficient_risk",
+            "target_volatility": 0.5
+        }
 
     nifty_csv_file = "nifty.csv"
 
     # button click to show the optimization
     if st.button("Optimize"):
-        timed_df = load_and_clean("Fetched_nifty500_fm2019_withDATE.csv")
+        timed_df = load_and_clean("close_dupli.csv")
         timed_df = clean(timed_df, start_date=start_date_df,
                          end_date=end_date_df, num_columns_to_keep=num_columns_to_keep)
         showOptimization(timed_df, exp_ret_type, cov_type,

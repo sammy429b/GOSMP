@@ -83,7 +83,6 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
     dict = {"type": "efficient_return", "target_return": number}
 
     """
-    print(timed_df.columns)
     mu = None
     if exp_ret_type["type"] == "mean":
         mu = expected_returns.mean_historical_return(
@@ -143,8 +142,14 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
     total_weight = sum(refined_weights.values())
     refined_weights_percent = {
         key: (value / total_weight) * 100 for key, value in refined_weights.items()}
-    print("Count: ", len(refined_weights_percent))
 
+    invested, not_invested, remaining = discrete_allocation(
+        invest_amount, refined_weights_percent, timed_df, start_date)
+
+    return performance, invested, refined_weights_percent, not_invested, remaining
+
+
+def discrete_allocation(invest_amount, refined_weights_percent, timed_df, start_date):
     not_invested = []
     invested = {}
 
@@ -173,27 +178,9 @@ def withOptimization(timed_df: pd.DataFrame, exp_ret_type: dict, cov_type: dict,
                 "allocated": price * math.floor(remaining / price)
             }
             not_invested.remove(i)
-            break
+            remaining = remaining - invested[i]["price"] * invested[i]["units"]
 
-    return performance, invested, refined_weights_percent, not_invested, remaining
-
-
-# newTimeDf = timed_df[[i for i in weight.keys()]]
-
-
-def DiscreteAllocation(timed_df, weight, investAmount, startDate):
-    reminder = 0
-    newWeights = {}
-    for key, value in weight.items():
-        allocatedPrice = value*investAmount*0.01
-        units = math.floor(allocatedPrice / timed_df[key][startDate])
-        rem: pd.Series = allocatedPrice - units * timed_df[key][startDate]
-        print(rem)
-        newWeights[key] = {"price": timed_df[key][startDate], "units": units, "allocated": (
-            value*investAmount*0.01), "reminder": rem}
-        reminder += rem
-
-    return reminder, newWeights
+    return invested, not_invested, remaining
 
 # r, weights = DiscreteAllocation(newTimeDf, weight, 100000, start_date)
 
@@ -216,7 +203,6 @@ def BackTest(df, startDate, duration, weights):
         end = start + datetime.timedelta(days=30*window)
         temp = df.loc[start:end, :]
 
-        # print(temp.iloc[-1,0])
         for i in weights.keys():
             x[i][c] = {
                 "date_start": str(temp[i].iloc[0:].index[0])[:10],
@@ -231,8 +217,8 @@ def BackTest(df, startDate, duration, weights):
             st_price = st * weights[key]["units"]
             en_price = en * weights[key]["units"]
             pct_cng = (en_price - st_price)/st_price * 100
-            values[c]["st_price"] = st_price
-            values[c]["en_price"] = en_price
+            values[c]["st_alloc"] = st_price
+            values[c]["en_alloc"] = en_price
 
             values[c]["pct_change"] = pct_cng
         start = end
@@ -241,8 +227,25 @@ def BackTest(df, startDate, duration, weights):
     return x, c-1
 
 
-# window, total_windows = BackTest(newTimeDf, "2010-01-05", 3000, weights)
-# print(window, total_windows)
+def totalReturn(nifty_csv_file, start_date, backtest_duration, timed_df, invested):
+    nifty = load_nifty(nifty_csv_file)
+
+    end_invest = start_date + datetime.timedelta(days=backtest_duration)
+    end_invest = timed_df.index[timed_df.index.get_indexer(
+        [end_invest], method='nearest')]
+    total_portfolio_return = []
+    for key, value in invested.items():
+        invested_start = timed_df[key][start_date.strftime(
+            "%Y-%m-%d")] * invested[key]["units"]
+        invested_end = timed_df[key][end_invest] * invested[key]["units"]
+        total_portfolio_return.append(
+            (invested_end - invested_start) / invested_start * 100)
+
+    nifty_start = nifty["nifty"][start_date.strftime("%Y-%m-%d")]
+    nifty_end = nifty["nifty"][end_invest]
+    nifty_return = (nifty_end - nifty_start) / nifty_start * 100
+
+    return sum(total_portfolio_return) / len(total_portfolio_return), nifty_return
 
 
 def PercentChange(window, totalWindows):
@@ -253,9 +256,8 @@ def PercentChange(window, totalWindows):
         end = None
         for key, value in window.items():
             cycle = window[key].get(part)
-            startPrice += cycle['st_price']
-            endPrice += cycle['en_price']
-            # print(part , cycle['date_end'])
+            startPrice += cycle['st_alloc']
+            endPrice += cycle['en_alloc']
             end = cycle['date_end']
         endDate.append(end)
         pctChange.append(((endPrice - startPrice)/startPrice * 100))
@@ -278,8 +280,6 @@ def PercentChange(window, totalWindows):
 def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int, timed_df: pd.DataFrame, weights: dict, not_invested: list, invested: dict, remainder):
     newTimeDf = timed_df[[i for i in weights.keys()]]
 
-    # r, weights_alloc = DiscreteAllocation(
-    #     newTimeDf, weights, invest_amount, start_date.strftime("%Y-%m-%d"))
     r = remainder
     weights_alloc = invested
 
@@ -305,30 +305,12 @@ def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int
     # 'PctChange': portfolioPercentChange
     # })
 
-    nifty = pd.read_csv(nifty_csv_file)
+    nifty = load_nifty(nifty_csv_file)
 
-    nifty['Date'] = pd.to_datetime(nifty['Date'])
+    invested_nifty, not_invested_nifty, remainder_nifty = discrete_allocation(
+        invest_amount, {"nifty": 100.0}, nifty, start_date)
 
-    nifty.set_index('Date', inplace=True)
-
-    # Drop columns where every entry is 0.0
-    nifty = nifty.loc[:, (nifty != 0).any(axis=0)]
-
-    # # # Use the column selection to drop columns where less than the threshold number of values are non-zero
-    threshold = 0.70 * len(nifty)
-    nifty = nifty.loc[:, (nifty != 0).sum() >= threshold]
-    nifty = nifty.iloc[::-1]
-
-    # rename Close to Nifty
-    nifty = nifty.rename(columns={'Close': 'nifty'})
-
-    # reverse the index
-    nifty = nifty.iloc[::-1]
-
-    r, weights = DiscreteAllocation(
-        nifty, {"nifty": 100.0}, invest_amount, start_date.strftime("%Y-%m-%d"))
-
-    win, total_ = BackTest(nifty, start_date, num_days, weights)
+    win, total_ = BackTest(nifty, start_date, num_days, invested_nifty)
 
     niftyPercentChange, niftyendDates = PercentChange(win, total_)
 
@@ -359,3 +341,27 @@ def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int
     # plt.tight_layout()
 
     return dats
+
+
+def load_nifty(nifty_csv_file: str):
+    nifty = pd.read_csv(nifty_csv_file)
+
+    nifty['Date'] = pd.to_datetime(nifty['Date'])
+
+    nifty.set_index('Date', inplace=True)
+
+    # Drop columns where every entry is 0.0
+    nifty = nifty.loc[:, (nifty != 0).any(axis=0)]
+
+    # # # Use the column selection to drop columns where less than the threshold number of values are non-zero
+    threshold = 0.70 * len(nifty)
+    nifty = nifty.loc[:, (nifty != 0).sum() >= threshold]
+    nifty = nifty.iloc[::-1]
+
+    # rename Close to Nifty
+    nifty = nifty.rename(columns={'Close': 'nifty'})
+
+    # reverse the index
+    nifty = nifty.iloc[::-1]
+
+    return nifty
