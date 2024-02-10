@@ -37,6 +37,36 @@ def load_and_clean(csv_file):
     # # # Use the column selection to drop columns where less than the threshold number of values are non-zero
     threshold = 0.70 * len(timed_df)
     timed_df = timed_df.loc[:, (timed_df != 0).sum() >= threshold]
+
+    # Iterate through each column
+    for col in timed_df.columns:
+        # Calculate the mean of the last 10 non-zero values using rolling and mean
+        rolling_mean = timed_df[col].replace(0, np.nan).rolling(window=10, min_periods=1).mean()
+        
+        # Fill zero values with the calculated rolling mean
+        timed_df[col] = timed_df.apply(lambda row: row[col] if row[col] != 0 else rolling_mean[row.name], axis=1)
+
+    nifty_df = pd.read_csv("nifty.csv")
+    nifty_df['Date'] = pd.to_datetime(nifty_df['Date'])
+    nifty_df.set_index('Date', inplace=True)
+
+    # Step 1: Calculate Nifty percentage returns for each rolling 6-month period
+    nifty_returns = nifty_df['Close'].pct_change().rolling(window=126).sum().dropna()
+    nifty_returns = nifty_returns.max()
+
+    # Step 2: Check if each stock meets the condition
+    retained_stocks = []
+
+    for stock in timed_df.columns:
+        stock_returns = timed_df[stock].pct_change().rolling(window=252).sum().dropna()
+        
+        # Check if any 6-month period has at least 50% of Nifty return
+        if (stock_returns[stock_returns >= 1].count() >= 5):
+            retained_stocks.append(stock)
+
+    # Step 3: Retain only the columns of retained stocks in stock_df
+    timed_df = timed_df[retained_stocks]
+
     return timed_df
 
 
