@@ -18,7 +18,7 @@ def withoutOptimization(timed_df: pd.DataFrame):
     """
 
     # Show daily returns
-    returns = timed_df.pct_change()
+    returns = timed_df.pct_change(fill_method=None)
     returns.fillna(0, inplace=True)
     returns.replace([np.inf, -np.inf], 0, inplace=True)
 
@@ -153,8 +153,12 @@ def discrete_allocation(invest_amount, refined_weights_percent, timed_df, start_
     not_invested = []
     invested = {}
 
+    # get closest date to the start date
+    start = timed_df.index[timed_df.index.get_indexer(
+        [start_date], method='nearest')][0]
+
     for i in refined_weights_percent:
-        price = timed_df[i][start_date.strftime("%Y-%m-%d")]
+        price = timed_df[i][start.strftime("%Y-%m-%d")]
         stock_invest = refined_weights_percent[i] * invest_amount / 100
         if stock_invest < price or refined_weights_percent[i] < 1:
             not_invested.append(i)
@@ -191,6 +195,7 @@ def BackTest(df, startDate, duration, weights):
     startDate: starting date string
     weights: weights dict 
     """
+    last_date = df.index[-1]
     window = 6  # month
     # start = datetime.datetime.strptime(startDate, "%Y-%m-%d")
     start = startDate
@@ -200,6 +205,9 @@ def BackTest(df, startDate, duration, weights):
     x = defaultdict(dict)
     c = 1
     while end < end_stop_date:
+        if end > last_date.date() or start > last_date.date():
+            break
+
         end = start + datetime.timedelta(days=30*window)
         temp = df.loc[start:end, :]
 
@@ -283,62 +291,29 @@ def backtest_with_nifty(nifty_csv_file, invest_amount, start_date, num_days: int
     r = remainder
     weights_alloc = invested
 
-    # for i in not_invested:
-    #     c = timed_df[i][start_date.strftime("%Y-%m-%d")]
-
-    #     if c < r:
-    #         # find how many units of i can be allocated
-    #         units = math.floor(r / c)
-    #         rem = r - units * c
-    #         weights_alloc[i] = {"price": c, "units": units,
-    #                             "allocated": units * c}
-    #         r = rem
-    #         not_invested.remove(i)
-
-    window, total_windows = BackTest(
-        newTimeDf, start_date, num_days, weights_alloc)
-
-    portfolioPercentChange, endDates = PercentChange(window, total_windows)
-
-    # portfolio = pd.DataFrame({
-    # 'Date': endDates,
-    # 'PctChange': portfolioPercentChange
-    # })
-
     nifty = load_nifty(nifty_csv_file)
 
     invested_nifty, not_invested_nifty, remainder_nifty = discrete_allocation(
         invest_amount, {"nifty": 100.0}, nifty, start_date)
 
+    window, total_windows = BackTest(
+        newTimeDf, start_date, num_days, weights_alloc)
+
     win, total_ = BackTest(nifty, start_date, num_days, invested_nifty)
 
+    portfolioPercentChange, endDates = PercentChange(window, total_windows)
     niftyPercentChange, niftyendDates = PercentChange(win, total_)
 
-    # nifty_portfolio = pd.DataFrame({
-    #     'Date': niftyendDates,
-    #     'niftyPctChange': niftyPercentChange
-    # })
+    if len(portfolioPercentChange) > len(niftyPercentChange):
+        portfolioPercentChange = portfolioPercentChange[:len(
+            niftyPercentChange)]
+        endDates = endDates[:len(niftyPercentChange)]
 
-    # dats = pd.concat([portfolio, nifty_portfolio["niftyPctChange"]], axis=1)
-
-    # instead of concat, you can create a df with the two columns
     dats = pd.DataFrame({
         'Date': endDates,
         'PctChange': portfolioPercentChange,
         'niftyPctChange': niftyPercentChange
     })
-
-    #     plt.figure(figsize=(10, 5))
-
-    # plt.plot(dats["Date"], dats["PctChange"], color="blue")
-    # plt.plot(dats["Date"], dats["niftyPctChange"], color="red")
-    # plt.xlabel("Date")
-    # plt.ylabel("Portfolio%")
-    # plt.xticks(rotation=90)
-    # plt.title("Portfolio vs Nifty")
-    # # add ledgend to the plot
-    # plt.legend(["Portfolio", "Nifty"])
-    # plt.tight_layout()
 
     return dats
 
