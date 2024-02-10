@@ -253,6 +253,8 @@ def totalReturn(nifty_csv_file, start_date, backtest_duration, timed_df, investe
     nifty_end = nifty["nifty"][end_invest]
     nifty_return = (nifty_end - nifty_start) / nifty_start * 100
 
+    print(total_portfolio_return)
+
     return sum(total_portfolio_return) / len(total_portfolio_return), nifty_return
 
 

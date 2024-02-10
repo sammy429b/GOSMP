@@ -9,3 +9,4 @@ pyportfolioopt
 bsedata
 yfinance
 nsepy
+streamlit

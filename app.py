@@ -79,7 +79,7 @@ def showOptimization(timed_df, exp_ret_type, cov_type, weight_type, invest_amoun
     dats.index = pd.to_datetime(dats['Date'])
     dats = dats.drop(["Date"], axis=1)
     st.write("Portfolio vs Nifty")
-    dats.columns = ["Nifty percent change", "Portfolio percent change"]
+    dats.columns = ["Portfolio percent change","Nifty percent change"]
     st.write(dats)
     st.line_chart(data=dats)
 
